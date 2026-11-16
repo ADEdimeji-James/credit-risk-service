@@ -1,0 +1,22 @@
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data and artefacts (too large / licence-restricted)
+data/
+mlruns/
+mlartifacts/
+models/
+
+# Secrets
+.env
+
+# Editor settings
+.vscode/
