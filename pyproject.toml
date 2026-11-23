@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "credit-risk"
+version = "0.1.0"
+description = "Credit default risk scoring service: P(default) with cost-based evaluation, served through FastAPI."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Adedimeji Adeteye" }]
+
+# Runtime: what training AND the API need. Ranges here; exact pins live in the lock files.
+dependencies = [
+    "numpy>=2.5,<3",
+    "pandas>=3.1,<4",
+    "pyarrow>=26",              # backs pandas 3's str dtype and Parquet; keep identical in train and serve
+    "scikit-learn>=1.9.1,<1.10", # tight on purpose: a pickled pipeline must be loaded with the version that saved it
+    "pyyaml>=6.0,<7",
+]
+
+[project.optional-dependencies]
+# Training only: stays out of the API image.
+train = [
+    "mlflow>=3.18,<4",
+    "lightgbm>=4.7,<5",  # moves to runtime if LightGBM becomes the served model (Stage 5)
+]
+# Development tools: tests, notebooks, plotting, lock-file compiler.
+dev = [
+    "pytest>=9.2,<10",
+    "jupyter>=1.1",
+    "matplotlib>=3.11",
+    "seaborn>=0.13",
+    "uv>=0.13",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
