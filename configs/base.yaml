@@ -1,0 +1,89 @@
+# Base run configuration for the credit risk baseline.
+# Relative paths are resolved against the project root (the folder that contains configs/),
+# so the command works from any working directory.
+# Override single values on the command line, e.g.:
+#   python -m credit_risk.train --config configs/base.yaml --set model.params.class_weight=balanced
+
+seed: 42
+
+paths:
+  raw_dir: data/raw
+  train_file: application_train.csv
+  processed_dir: data/processed          # git-ignored (data/)
+  holdout_ids_file: holdout_ids.csv      # saved once; defines the untouched test set
+
+data:
+  id_col: SK_ID_CURR
+  target_col: TARGET
+
+split:
+  holdout_size: 0.2   # stratified; untouched until Stage 6 (~4,965 defaults)
+  cv_folds: 5         # stratified K-fold on the remaining 80%
+
+# Error costs in naira, base case from the Stage 1 problem statement
+# (L = 500,000; 25% flat fee; 30% recovery; default before first instalment).
+costs:
+  c_fn: 350000   # approve a borrower who defaults: principal lost after recovery
+  c_fp: 125000   # decline a borrower who would have repaid: fee forgone
+  # Decision threshold is derived in code: p* = c_fp / (c_fp + c_fn) ~= 0.263
+
+features:
+  # Excluded from model inputs, kept in the data for the Stage 6 fairness audit.
+  protected_cols:
+    - CODE_GENDER
+    - DAYS_BIRTH           # age
+    - NAME_FAMILY_STATUS
+  # Redundant or replaced columns, dropped for logistic regression (EDA finding 7).
+  redundant_cols:
+    # 28 numeric housing duplicates: keep *_AVG, drop *_MODE and *_MEDI
+    - APARTMENTS_MODE
+    - BASEMENTAREA_MODE
+    - YEARS_BEGINEXPLUATATION_MODE
+    - YEARS_BUILD_MODE
+    - COMMONAREA_MODE
+    - ELEVATORS_MODE
+    - ENTRANCES_MODE
+    - FLOORSMAX_MODE
+    - FLOORSMIN_MODE
+    - LANDAREA_MODE
+    - LIVINGAPARTMENTS_MODE
+    - LIVINGAREA_MODE
+    - NONLIVINGAPARTMENTS_MODE
+    - NONLIVINGAREA_MODE
+    - APARTMENTS_MEDI
+    - BASEMENTAREA_MEDI
+    - YEARS_BEGINEXPLUATATION_MEDI
+    - YEARS_BUILD_MEDI
+    - COMMONAREA_MEDI
+    - ELEVATORS_MEDI
+    - ENTRANCES_MEDI
+    - FLOORSMAX_MEDI
+    - FLOORSMIN_MEDI
+    - LANDAREA_MEDI
+    - LIVINGAPARTMENTS_MEDI
+    - LIVINGAREA_MEDI
+    - NONLIVINGAPARTMENTS_MEDI
+    - NONLIVINGAREA_MEDI
+    # other near-duplicates
+    - AMT_GOODS_PRICE            # ~ AMT_CREDIT; its signal kept via CREDIT_TO_GOODS (computed before the drop)
+    - OBS_30_CNT_SOCIAL_CIRCLE   # ~ OBS_60_CNT_SOCIAL_CIRCLE
+    - REGION_RATING_CLIENT       # ~ REGION_RATING_CLIENT_W_CITY
+    - FLAG_EMP_PHONE             # same fact as EMPLOYED_PLACEHOLDER
+    - DAYS_EMPLOYED              # replaced by YEARS_EMPLOYED + EMPLOYED_PLACEHOLDER
+  # Heavy-tailed money columns: log1p before scaling (LR only).
+  money_cols:
+    - AMT_INCOME_TOTAL
+    - AMT_CREDIT
+    - AMT_ANNUITY
+
+model:
+  name: logistic_regression
+  params:
+    C: 1.0
+    class_weight: null   # compare with "balanced" via --set
+    max_iter: 1000
+    solver: lbfgs
+
+mlflow:
+  experiment_name: credit-risk-baseline
+  tracking_uri: mlruns   # local; backend checked in item 8
