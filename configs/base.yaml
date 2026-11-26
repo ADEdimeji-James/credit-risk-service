@@ -9,6 +9,7 @@ seed: 42
 paths:
   raw_dir: data/raw
   train_file: application_train.csv
+  bureau_file: bureau.csv
   processed_dir: data/processed          # git-ignored (data/)
   holdout_ids_file: holdout_ids.csv      # saved once; defines the untouched test set
 
@@ -76,13 +77,39 @@ features:
     - AMT_CREDIT
     - AMT_ANNUITY
 
+# Credit-bureau aggregates per applicant (src/credit_risk/bureau.py). Stage 5.
+# Reproduce the Stage 4 baseline with:  --set bureau.enabled=false
+bureau:
+  enabled: true
+  # Heavy-tailed bureau sums (all >= 0): log1p before scaling (LR only), like features.money_cols.
+  money_cols:
+    - BUREAU_ACTIVE_CREDIT_SUM
+    - BUREAU_ACTIVE_DEBT_SUM
+    - BUREAU_OVERDUE_SUM
+
+# One parameter block per model; model.name picks the active one.
+# Switch with:  --set model.name=lightgbm
+# Override one value with e.g.:  --set model.params.lightgbm.n_estimators=800
+# random_state is set from `seed` in code, so it is not repeated here.
 model:
   name: logistic_regression
   params:
-    C: 1.0
-    class_weight: null   # compare with "balanced" via --set
-    max_iter: 1000
-    solver: lbfgs
+    logistic_regression:
+      C: 1.0
+      class_weight: null   # "balanced" inflates probabilities (Stage 4 lesson); keep null
+      max_iter: 1000
+      solver: lbfgs
+    lightgbm:
+      n_estimators: 600       # fixed, no early stopping (keeps CV simple); lr x trees ~ 30
+      learning_rate: 0.05
+      num_leaves: 31
+      min_child_samples: 100  # >= 100 applicants per leaf: smoother, less overfit probabilities
+      subsample: 0.8          # row sampling per tree...
+      subsample_freq: 1       # ...only active when subsample_freq > 0 (LightGBM default is 0)
+      colsample_bytree: 0.8
+      reg_lambda: 1.0
+      verbose: -1
+      # no class weights / is_unbalance: keeps probabilities closer to calibrated (Stage 4 lesson)
 
 mlflow:
   experiment_name: credit-risk-baseline

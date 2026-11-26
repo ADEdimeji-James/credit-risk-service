@@ -20,7 +20,7 @@ DAYS_PER_YEAR = 365.25
 HOUSING_SUFFIXES = ("_AVG", "_MODE", "_MEDI")
 
 
-def _safe_ratio(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
+def safe_ratio(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
     """numerator / denominator, with NaN (not inf) where the denominator is 0 or missing."""
     return numerator / denominator.where(denominator != 0)
 
@@ -37,9 +37,9 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     # Missingness carries signal (finding 2): applicants with no housing data default more.
     new["HAS_HOUSING_DATA"] = df[housing_cols].notna().any(axis=1).astype("int8")
     # Ratios (finding 5). Computed before AMT_GOODS_PRICE is dropped as redundant.
-    new["CREDIT_TO_INCOME"] = _safe_ratio(df["AMT_CREDIT"], df["AMT_INCOME_TOTAL"])
-    new["ANNUITY_TO_INCOME"] = _safe_ratio(df["AMT_ANNUITY"], df["AMT_INCOME_TOTAL"])
-    new["CREDIT_TO_GOODS"] = _safe_ratio(df["AMT_CREDIT"], df["AMT_GOODS_PRICE"])
+    new["CREDIT_TO_INCOME"] = safe_ratio(df["AMT_CREDIT"], df["AMT_INCOME_TOTAL"])
+    new["ANNUITY_TO_INCOME"] = safe_ratio(df["AMT_ANNUITY"], df["AMT_INCOME_TOTAL"])
+    new["CREDIT_TO_GOODS"] = safe_ratio(df["AMT_CREDIT"], df["AMT_GOODS_PRICE"])
 
     # One concat instead of many single-column inserts (avoids pandas fragmentation).
     return pd.concat([df, new], axis=1)
@@ -85,6 +85,8 @@ def resolve_column_groups(X: pd.DataFrame, config: Config) -> ColumnGroups:
     explicit lists are what the pipeline uses and what gets logged to MLflow.
     """
     money = list(config.features.money_cols)
+    if config.bureau.enabled:
+        money += config.bureau.money_cols
     missing = sorted(set(money) - set(X.columns))
     if missing:
         raise KeyError(f"features.money_cols not in the data: {missing}")

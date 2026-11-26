@@ -25,12 +25,17 @@ class ConfigError(ValueError):
 class PathsConfig:
     raw_dir: Path
     train_file: str
+    bureau_file: str
     processed_dir: Path
     holdout_ids_file: str
 
     @property
     def train_path(self) -> Path:
         return self.raw_dir / self.train_file
+
+    @property
+    def bureau_path(self) -> Path:
+        return self.raw_dir / self.bureau_file
 
     @property
     def holdout_ids_path(self) -> Path:
@@ -78,9 +83,30 @@ class FeaturesConfig:
 
 
 @dataclass(frozen=True)
+class BureauConfig:
+    enabled: bool          # join bureau aggregates (bureau.py) or not
+    money_cols: list[str]  # bureau sums that get log1p in the LR pipeline
+
+
+@dataclass(frozen=True)
 class ModelConfig:
     name: str
-    params: dict[str, Any]  # passed straight to the estimator; free-form on purpose
+    # One free-form parameter block per model name; passed straight to the estimator.
+    params: dict[str, dict[str, Any]]
+
+    def __post_init__(self) -> None:
+        if self.name not in self.params:
+            raise ConfigError(
+                f"model.name {self.name!r} has no block under model.params; "
+                f"available: {sorted(self.params)}"
+            )
+        if not isinstance(self.params[self.name], dict):
+            raise ConfigError(f"model.params.{self.name} must be a mapping")
+
+    @property
+    def active_params(self) -> dict[str, Any]:
+        """Parameters of the selected model only."""
+        return self.params[self.name]
 
 
 @dataclass(frozen=True)
@@ -103,6 +129,7 @@ class Config:
     split: SplitConfig
     costs: CostsConfig
     features: FeaturesConfig
+    bureau: BureauConfig
     model: ModelConfig
     mlflow: MlflowConfig
 
@@ -112,6 +139,10 @@ class Config:
 # --------------------------------------------------------------------------------------
 def _check_type(value: Any, expected: Any, where: str) -> Any:
     """Check simple scalar types. Dataclasses do not do this at runtime."""
+    if expected is bool:
+        if not isinstance(value, bool):
+            raise ConfigError(f"{where}: expected true/false, got {value!r}")
+        return value
     if expected is float:
         # Accept ints for floats (YAML reads 350000 as int), but not bools.
         if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -160,8 +191,13 @@ def _build(cls: type, raw: Any, where: str, root: Path) -> Any:
 # --------------------------------------------------------------------------------------
 # Command-line overrides
 # --------------------------------------------------------------------------------------
-# Only these free-form mappings may gain keys that are not already in the YAML file.
+# Only these free-form mappings (and anything nested inside them) may gain keys that
+# are not already in the YAML file.
 _OPEN_MAPPINGS = {("model", "params")}
+
+
+def _is_open(section: tuple[str, ...]) -> bool:
+    return any(section[: len(prefix)] == prefix for prefix in _OPEN_MAPPINGS)
 
 
 def apply_overrides(raw: dict[str, Any], overrides: list[str]) -> dict[str, Any]:
@@ -169,7 +205,7 @@ def apply_overrides(raw: dict[str, Any], overrides: list[str]) -> dict[str, Any]
 
     Values are parsed as YAML, so ``3`` -> int, ``0.5`` -> float, ``null`` -> None,
     ``balanced`` -> str. A key that does not exist raises, so a typo cannot silently
-    add a new setting (except inside ``model.params``).
+    add a new setting (except inside ``model.params``, e.g. ``model.params.lightgbm.max_depth``).
     """
     for item in overrides:
         if "=" not in item:
@@ -182,7 +218,7 @@ def apply_overrides(raw: dict[str, Any], overrides: list[str]) -> dict[str, Any]
                 raise ConfigError(f"override {item!r}: no section {'.'.join(keys[: depth + 1])!r}")
             node = node[key]
         last = keys[-1]
-        if last not in node and tuple(keys[:-1]) not in _OPEN_MAPPINGS:
+        if last not in node and not _is_open(tuple(keys[:-1])):
             raise ConfigError(f"override {item!r}: unknown key {dotted!r}")
         node[last] = yaml.safe_load(text)
     return raw

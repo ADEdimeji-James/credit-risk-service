@@ -2,11 +2,12 @@
 
 Usage (from anywhere, with the venv active):
     python -m credit_risk.train --config configs/base.yaml
-    python -m credit_risk.train --config configs/base.yaml --set model.params.class_weight=balanced
+    python -m credit_risk.train --config configs/base.yaml --set model.name=lightgbm --run-name lgbm_bureau
+    python -m credit_risk.train --config configs/base.yaml --set bureau.enabled=false --run-name lr_baseline
 
 Flow:
     config -> load data -> fixed hold-out (set aside, untouched until Stage 6)
-    -> row-wise features -> stratified K-fold CV on the training part
+    -> row-wise features (+ bureau aggregates if enabled) -> stratified K-fold CV on the training part
     -> metrics per fold (PR-AUC, ROC-AUC, naira profit vs approve-all)
     -> refit on the whole training part -> log everything to MLflow
 
@@ -28,6 +29,7 @@ from sklearn.base import clone
 from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import Pipeline
 
+from credit_risk.bureau import add_bureau_features, aggregate_bureau, load_bureau
 from credit_risk.config import Config, config_to_dict, load_config, project_root_for
 from credit_risk.data import load_applications, load_or_create_holdout_ids, split_train_holdout
 from credit_risk.evaluate import evaluate_predictions
@@ -114,6 +116,7 @@ def _setup_mlflow(config: Config) -> None:
 def _run_params(config: Config, X: pd.DataFrame, groups_sizes: dict[str, int]) -> dict[str, Any]:
     params = {
         "model": config.model.name,
+        "bureau_enabled": config.bureau.enabled,
         "seed": config.seed,
         "holdout_size": config.split.holdout_size,
         "cv_folds": config.split.cv_folds,
@@ -123,7 +126,7 @@ def _run_params(config: Config, X: pd.DataFrame, groups_sizes: dict[str, int]) -
         "n_train_rows": len(X),
         "n_input_columns": X.shape[1],
     }
-    params.update({f"model.{k}": v for k, v in config.model.params.items()})
+    params.update({f"model.{k}": v for k, v in config.model.active_params.items()})
     params.update({f"n_{k}_columns": v for k, v in groups_sizes.items()})
     return params
 
@@ -142,18 +145,22 @@ def main(argv: list[str] | None = None) -> None:
         len(train_df), train_df[config.data.target_col].mean(), len(holdout_ids),
     )
 
-    # 2. Row-wise features and explicit column groups.
-    X, y = select_model_inputs(add_features(train_df), config)
+    # 2. Row-wise features (+ bureau aggregates) and explicit column groups.
+    features_df = add_features(train_df)
+    if config.bureau.enabled:
+        bureau_agg = aggregate_bureau(load_bureau(config.paths.bureau_path), config.data.id_col)
+        features_df = add_bureau_features(features_df, bureau_agg, config.data.id_col)
+    X, y = select_model_inputs(features_df, config)
     groups = resolve_column_groups(X, config)
     group_sizes = {name: len(cols) for name, cols in groups.as_dict().items()}
     logger.info("Model inputs: %d columns %s", X.shape[1], group_sizes)
 
-    pipeline = build_pipeline(config.model.name, config.model.params, groups)
+    pipeline = build_pipeline(config.model.name, config.model.active_params, groups, config.seed)
 
     # 3. Cross-validate, refit on the whole training part, log everything.
     _setup_mlflow(config)
     with mlflow.start_run(run_name=args.run_name) as run:
-        mlflow.set_tags({"stage": "4", "git_commit": _git_commit(args.config)})
+        mlflow.set_tags({"stage": "5", "git_commit": _git_commit(args.config)})
         mlflow.log_params(_run_params(config, X, group_sizes))
         mlflow.log_dict(config_to_dict(config), "config_resolved.yaml")  # includes --set overrides
         mlflow.log_dict(groups.as_dict(), "column_groups.json")
