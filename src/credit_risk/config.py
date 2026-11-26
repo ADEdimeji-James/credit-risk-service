@@ -86,7 +86,13 @@ class ModelConfig:
 @dataclass(frozen=True)
 class MlflowConfig:
     experiment_name: str
-    tracking_uri: str
+    db_path: Path       # SQLite tracking database (MLflow 3's default backend)
+    artifact_dir: Path  # where runs store models and files
+
+    @property
+    def tracking_uri(self) -> str:
+        # Absolute path, so runs land in the same database from any working directory.
+        return f"sqlite:///{self.db_path.as_posix()}"
 
 
 @dataclass(frozen=True)

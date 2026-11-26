@@ -86,4 +86,6 @@ model:
 
 mlflow:
   experiment_name: credit-risk-baseline
-  tracking_uri: mlruns   # local; backend checked in item 8
+  db_path: mlflow.db          # SQLite tracking database (MLflow 3 default backend); git-ignored
+  artifact_dir: mlartifacts   # logged models and files; git-ignored
+  # View runs:  mlflow ui --backend-store-uri sqlite:///mlflow.db   (run from the project root)
