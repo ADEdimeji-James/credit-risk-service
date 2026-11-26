@@ -16,6 +16,7 @@ dependencies = [
     "pandas>=3.1,<4",
     "pyarrow>=26",              # backs pandas 3's str dtype and Parquet; keep identical in train and serve
     "scikit-learn>=1.9.1,<1.10", # tight on purpose: a pickled pipeline must be loaded with the version that saved it
+    "lightgbm>=4.7,<4.8",        # served model since Stage 5; tight for the same pickle reason
     "pyyaml>=6.0,<7",
 ]
 
@@ -23,7 +24,6 @@ dependencies = [
 # Training only: stays out of the API image.
 train = [
     "mlflow>=3.18,<4",
-    "lightgbm>=4.7,<5",  # moves to runtime if LightGBM becomes the served model (Stage 5)
 ]
 # Development tools: tests, notebooks, plotting, lock-file compiler.
 dev = [

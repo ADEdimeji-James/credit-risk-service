@@ -88,11 +88,12 @@ bureau:
     - BUREAU_OVERDUE_SUM
 
 # One parameter block per model; model.name picks the active one.
-# Switch with:  --set model.name=lightgbm
+# LightGBM adopted in Stage 5 (beat LR + bureau on PR-AUC and profit in all 5 folds).
+# Run the LR comparison with:  --set model.name=logistic_regression
 # Override one value with e.g.:  --set model.params.lightgbm.n_estimators=800
 # random_state is set from `seed` in code, so it is not repeated here.
 model:
-  name: logistic_regression
+  name: lightgbm
   params:
     logistic_regression:
       C: 1.0

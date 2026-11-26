@@ -1,9 +1,9 @@
 """Train and evaluate a model from a YAML config, and log the run to MLflow.
 
 Usage (from anywhere, with the venv active):
-    python -m credit_risk.train --config configs/base.yaml
-    python -m credit_risk.train --config configs/base.yaml --set model.name=lightgbm --run-name lgbm_bureau
-    python -m credit_risk.train --config configs/base.yaml --set bureau.enabled=false --run-name lr_baseline
+    python -m credit_risk.train --config configs/base.yaml --run-name lgbm_bureau
+    python -m credit_risk.train --config configs/base.yaml --set model.name=logistic_regression --run-name lr_bureau
+    python -m credit_risk.train --config configs/base.yaml --set model.name=logistic_regression --set bureau.enabled=false --run-name lr_baseline
 
 Flow:
     config -> load data -> fixed hold-out (set aside, untouched until Stage 6)
